@@ -16,6 +16,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -43,6 +44,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -102,6 +104,10 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         favorites.addAll(prefs.getStringSet(PREF_FAVORITES, new HashSet<>()));
         allChannels.addAll(readChannels());
+        
+        // Expert Sort: Alphabetical order
+        Collections.sort(allChannels, (c1, c2) -> c1.name.compareToIgnoreCase(c2.name));
+        
         visibleChannels.addAll(allChannels);
         
         checkForUpdates();
@@ -236,13 +242,21 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(bg);
         root.setPadding(dp(12), dp(12), dp(12), dp(12));
+        
+        // Android TV: Support D-pad navigation
+        root.setFocusable(false);
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(getResources().getIdentifier("ic_logo", "drawable", getPackageName()));
+        header.addView(logo, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
         LinearLayout titleBlock = new LinearLayout(this);
         titleBlock.setOrientation(LinearLayout.VERTICAL);
+        titleBlock.setPadding(dp(12), 0, 0, 0);
 
         TextView title = new TextView(this);
         title.setText(APP_NAME);
@@ -279,6 +293,19 @@ public class MainActivity extends Activity {
         playerView.setControllerAutoShow(true);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setKeepScreenOn(true);
+        
+        // Stable: Hide system bars when playing
+        playerView.setControllerVisibilityListener(new PlayerView.ControllerVisibilityListener() {
+            @Override
+            public void onVisibilityChanged(int visibility) {
+                if (visibility == View.GONE) {
+                    hideSystemUI();
+                } else {
+                    showSystemUI();
+                }
+            }
+        });
+        
         root.addView(playerView, new LinearLayout.LayoutParams(-1, 0, 1.05f));
 
         loading = new ProgressBar(this);
@@ -297,6 +324,7 @@ public class MainActivity extends Activity {
 
         favoriteToggle = makeButton("Star");
         favoriteToggle.setOnClickListener(v -> toggleFavorite());
+        favoriteToggle.setFocusable(true);
         controls.addView(favoriteToggle, new LinearLayout.LayoutParams(dp(88), dp(42)));
 
         showFavorites = makeButton("Favorites");
@@ -304,6 +332,7 @@ public class MainActivity extends Activity {
             favoritesOnly = !favoritesOnly;
             updateFilters();
         });
+        showFavorites.setFocusable(true);
         controls.addView(showFavorites, new LinearLayout.LayoutParams(dp(118), dp(42)));
 
         search = new EditText(this);
@@ -313,6 +342,7 @@ public class MainActivity extends Activity {
         search.setSingleLine(true);
         search.setPadding(dp(12), 0, dp(12), 0);
         search.setBackgroundColor(panel2);
+        search.setFocusable(true);
         controls.addView(search, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
         root.addView(controls, new LinearLayout.LayoutParams(-1, -2));
@@ -364,11 +394,16 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(bg);
         root.setPadding(dp(26), dp(26), dp(26), dp(26));
 
+        ImageView bigLogo = new ImageView(this);
+        bigLogo.setImageResource(getResources().getIdentifier("ic_logo", "drawable", getPackageName()));
+        root.addView(bigLogo, new LinearLayout.LayoutParams(dp(120), dp(120)));
+
         TextView appName = new TextView(this);
         appName.setText(APP_NAME);
         appName.setTextColor(text);
         appName.setTextSize(42);
         appName.setGravity(Gravity.CENTER);
+        appName.setPadding(0, dp(16), 0, 0);
         root.addView(appName, new LinearLayout.LayoutParams(-1, -2));
 
         TextView tagline = new TextView(this);
@@ -412,6 +447,14 @@ public class MainActivity extends Activity {
         button.setTextSize(13);
         button.setAllCaps(false);
         button.setBackgroundColor(panel2);
+        button.setFocusable(true);
+        
+        // Expert: TV Focus Effect
+        button.setOnFocusChangeListener((v, hasFocus) -> {
+            v.setBackgroundColor(hasFocus ? accent : panel2);
+            v.setScaleX(hasFocus ? 1.1f : 1.0f);
+            v.setScaleY(hasFocus ? 1.1f : 1.0f);
+        });
         return button;
     }
 
@@ -516,6 +559,7 @@ public class MainActivity extends Activity {
             
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(34));
             params.setMargins(0, 0, dp(8), 0);
+            btn.setFocusable(true);
             btn.setOnClickListener(v -> {
                 currentCategory = cat;
                 updateFilters();
@@ -527,6 +571,26 @@ public class MainActivity extends Activity {
     private void setStatus(String message, boolean error) {
         status.setText(message);
         status.setTextColor(error ? danger : muted);
+        
+        // Expert: Auto-show retry button only on errors
+        retryButton.setVisibility(error ? View.VISIBLE : View.GONE);
+    }
+
+    private void hideSystemUI() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    private void showSystemUI() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
     }
 
     private String readableError(PlaybackException error) {
@@ -683,6 +747,19 @@ public class MainActivity extends Activity {
             LinearLayout row = new LinearLayout(MainActivity.this);
             row.setOrientation(LinearLayout.VERTICAL);
             row.setPadding(dp(12), dp(9), dp(12), dp(9));
+            row.setFocusable(true);
+            row.setClickable(true);
+            
+            // Expert: TV Focus Effect for List Items
+            row.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) {
+                    v.setBackgroundColor(Color.rgb(30, 45, 60)); // Highlight color
+                } else {
+                    v.setBackgroundColor(channel == currentChannel ? Color.rgb(18, 38, 35) : panel);
+                }
+            });
+            
+            // Initial state
             row.setBackgroundColor(channel == currentChannel ? Color.rgb(18, 38, 35) : panel);
 
             TextView name = new TextView(MainActivity.this);
