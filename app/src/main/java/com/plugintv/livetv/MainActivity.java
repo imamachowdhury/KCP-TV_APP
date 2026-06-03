@@ -84,11 +84,17 @@ public class MainActivity extends Activity {
     private ProgressBar loading;
     private Button favoriteToggle;
     private Button showFavorites;
+    private Button fullScreenToggle;
     private Button retryButton;
     private LinearLayout categoryList;
+    private LinearLayout header;
+    private LinearLayout controls;
+    private android.widget.HorizontalScrollView categoryScroll;
+    private RecyclerView recyclerView;
 
     private Channel currentChannel;
     private boolean favoritesOnly = false;
+    private boolean isFullScreen = false;
     private String currentCategory = "All";
     private String currentQuery = "";
 
@@ -183,7 +189,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(12), dp(12), dp(12), dp(12));
 
         // Header
-        LinearLayout header = new LinearLayout(this);
+        header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         
         ImageView logo = new ImageView(this);
@@ -207,6 +213,12 @@ public class MainActivity extends Activity {
         titleBlock.addView(countText);
         header.addView(titleBlock, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        fullScreenToggle = makeButton("Full", false);
+        fullScreenToggle.setOnClickListener(v -> toggleFullScreen());
+        LinearLayout.LayoutParams fsParams = new LinearLayout.LayoutParams(dp(70), dp(36));
+        fsParams.setMargins(0, 0, dp(8), 0);
+        header.addView(fullScreenToggle, fsParams);
+
         retryButton = makeButton("Retry", false);
         retryButton.setOnClickListener(v -> { if (currentChannel != null) playChannel(currentChannel); });
         header.addView(retryButton, new LinearLayout.LayoutParams(dp(80), dp(36)));
@@ -223,6 +235,7 @@ public class MainActivity extends Activity {
         playerView.setPlayer(player);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setKeepScreenOn(true);
+        playerView.setOnClickListener(v -> toggleFullScreen());
         root.addView(playerView, new LinearLayout.LayoutParams(-1, 0, 1.2f));
 
         loading = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
@@ -236,16 +249,16 @@ public class MainActivity extends Activity {
         root.addView(status);
 
         // Controls
-        LinearLayout controls = new LinearLayout(this);
+        controls = new LinearLayout(this);
         controls.setGravity(Gravity.CENTER_VERTICAL);
 
         favoriteToggle = makeButton("Star", false);
         favoriteToggle.setOnClickListener(v -> toggleFavorite());
-        controls.addView(favoriteToggle, new LinearLayout.LayoutParams(dp(80), dp(40)));
+        controls.addView(favoriteToggle, new LinearLayout.LayoutParams(dp(70), dp(40)));
 
         showFavorites = makeButton("Favorites", false);
         showFavorites.setOnClickListener(v -> { favoritesOnly = !favoritesOnly; updateFilters(); });
-        LinearLayout.LayoutParams favParams = new LinearLayout.LayoutParams(dp(110), dp(40));
+        LinearLayout.LayoutParams favParams = new LinearLayout.LayoutParams(dp(90), dp(40));
         favParams.setMargins(dp(8), 0, dp(8), 0);
         controls.addView(showFavorites, favParams);
 
@@ -260,7 +273,7 @@ public class MainActivity extends Activity {
         root.addView(controls, new LinearLayout.LayoutParams(-1, -2));
 
         // Categories
-        android.widget.HorizontalScrollView categoryScroll = new android.widget.HorizontalScrollView(this);
+        categoryScroll = new android.widget.HorizontalScrollView(this);
         categoryScroll.setPadding(0, dp(10), 0, dp(10));
         categoryScroll.setHorizontalScrollBarEnabled(false);
         categoryList = new LinearLayout(this);
@@ -268,7 +281,7 @@ public class MainActivity extends Activity {
         root.addView(categoryScroll);
 
         // Optimized List (RecyclerView)
-        RecyclerView recyclerView = new RecyclerView(this);
+        recyclerView = new RecyclerView(this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setBackgroundColor(panel);
         
@@ -384,6 +397,65 @@ public class MainActivity extends Activity {
             p.setMargins(0, 0, dp(8), 0);
             b.setOnClickListener(v -> { currentCategory = cat; updateFilters(); });
             categoryList.addView(b, p);
+        }
+    }
+
+    private void toggleFullScreen() {
+        isFullScreen = !isFullScreen;
+        
+        int visibility = isFullScreen ? View.GONE : View.VISIBLE;
+        // header.setVisibility(visibility); // Keep header visible or handle it differently?
+        // Let's hide everything except the player and the exit button.
+        
+        nowPlaying.setVisibility(visibility);
+        controls.setVisibility(visibility);
+        categoryScroll.setVisibility(visibility);
+        recyclerView.setVisibility(visibility);
+        
+        // If we want a truly "full" experience, we hide header too but keep a way to exit.
+        header.setVisibility(visibility);
+        
+        // Adjust PlayerView Layout
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerView.getLayoutParams();
+        if (isFullScreen) {
+            params.height = -1; // Match Parent
+            params.weight = 0;
+            hideSystemUI();
+        } else {
+            params.height = 0;
+            params.weight = 1.2f;
+            showSystemUI();
+        }
+        playerView.setLayoutParams(params);
+        fullScreenToggle.setText(isFullScreen ? "Exit" : "Full");
+        
+        // If in FullScreen, move the toggle to a temporary overlay or just rely on Back.
+        // For now, let's keep it simple. The user can press Back to exit.
+    }
+
+    private void hideSystemUI() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    private void showSystemUI() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (isFullScreen) {
+            toggleFullScreen();
+        } else {
+            super.onBackPressed();
         }
     }
 
@@ -503,19 +575,25 @@ public class MainActivity extends Activity {
     }
 
     private boolean isNewerVersion(String latest, String current) {
+        if (latest == null || current == null || latest.trim().equals(current.trim())) return false;
         try {
             String[] v1 = latest.split("\\.");
             String[] v2 = current.split("\\.");
             int length = Math.max(v1.length, v2.length);
             for (int i = 0; i < length; i++) {
-                int n1 = i < v1.length ? Integer.parseInt(v1[i]) : 0;
-                int n2 = i < v2.length ? Integer.parseInt(v2[i]) : 0;
+                int n1 = 0, n2 = 0;
+                if (i < v1.length) {
+                    String s1 = v1[i].replaceAll("[^0-9]", "");
+                    if (!s1.isEmpty()) n1 = Integer.parseInt(s1);
+                }
+                if (i < v2.length) {
+                    String s2 = v2[i].replaceAll("[^0-9]", "");
+                    if (!s2.isEmpty()) n2 = Integer.parseInt(s2);
+                }
                 if (n1 > n2) return true;
                 if (n1 < n2) return false;
             }
-        } catch (Exception e) {
-            return !latest.equals(current);
-        }
+        } catch (Exception ignored) {}
         return false;
     }
 
