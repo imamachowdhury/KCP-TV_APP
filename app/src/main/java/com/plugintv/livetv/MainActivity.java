@@ -20,6 +20,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -85,10 +86,12 @@ public class MainActivity extends Activity {
     private Button favoriteToggle;
     private Button showFavorites;
     private Button fullScreenToggle;
+    private Button floatingExitButton;
     private Button retryButton;
     private LinearLayout categoryList;
     private LinearLayout header;
     private LinearLayout controls;
+    private LinearLayout root;
     private android.widget.HorizontalScrollView categoryScroll;
     private RecyclerView recyclerView;
 
@@ -183,7 +186,7 @@ public class MainActivity extends Activity {
         // Cache Logo Resource ID to avoid reflection in loop
         final int logoResId = getResources().getIdentifier("ic_logo", "drawable", getPackageName());
         
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(bg);
         root.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -231,12 +234,24 @@ public class MainActivity extends Activity {
         root.addView(nowPlaying);
 
         // Player Section
+        FrameLayout playerContainer = new FrameLayout(this);
+        
         playerView = new PlayerView(this);
         playerView.setPlayer(player);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setKeepScreenOn(true);
         playerView.setOnClickListener(v -> toggleFullScreen());
-        root.addView(playerView, new LinearLayout.LayoutParams(-1, 0, 1.2f));
+        playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+
+        floatingExitButton = makeButton("Exit", false);
+        floatingExitButton.setVisibility(View.GONE);
+        floatingExitButton.setOnClickListener(v -> toggleFullScreen());
+        FrameLayout.LayoutParams exitParams = new FrameLayout.LayoutParams(dp(80), dp(36));
+        exitParams.gravity = Gravity.TOP | Gravity.END;
+        exitParams.setMargins(0, dp(10), dp(10), 0);
+        playerContainer.addView(floatingExitButton, exitParams);
+
+        root.addView(playerContainer, new LinearLayout.LayoutParams(-1, 0, 1.2f));
 
         loading = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         loading.setIndeterminate(true);
@@ -404,19 +419,19 @@ public class MainActivity extends Activity {
         isFullScreen = !isFullScreen;
         
         int visibility = isFullScreen ? View.GONE : View.VISIBLE;
-        // header.setVisibility(visibility); // Keep header visible or handle it differently?
-        // Let's hide everything except the player and the exit button.
         
         nowPlaying.setVisibility(visibility);
         controls.setVisibility(visibility);
         categoryScroll.setVisibility(visibility);
         recyclerView.setVisibility(visibility);
-        
-        // If we want a truly "full" experience, we hide header too but keep a way to exit.
         header.setVisibility(visibility);
         
-        // Adjust PlayerView Layout
-        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerView.getLayoutParams();
+        floatingExitButton.setVisibility(isFullScreen ? View.VISIBLE : View.GONE);
+        root.setPadding(isFullScreen ? 0 : dp(12), isFullScreen ? 0 : dp(12), isFullScreen ? 0 : dp(12), isFullScreen ? 0 : dp(12));
+
+        // Adjust PlayerView Layout (it's inside playerContainer now)
+        View playerContainer = (View) playerView.getParent();
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerContainer.getLayoutParams();
         if (isFullScreen) {
             params.height = -1; // Match Parent
             params.weight = 0;
@@ -426,11 +441,8 @@ public class MainActivity extends Activity {
             params.weight = 1.2f;
             showSystemUI();
         }
-        playerView.setLayoutParams(params);
+        playerContainer.setLayoutParams(params);
         fullScreenToggle.setText(isFullScreen ? "Exit" : "Full");
-        
-        // If in FullScreen, move the toggle to a temporary overlay or just rely on Back.
-        // For now, let's keep it simple. The user can press Back to exit.
     }
 
     private void hideSystemUI() {
